@@ -1,0 +1,103 @@
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: fintech_mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-admin123}
+      MONGO_INITDB_DATABASE: fintech_forecasting
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - fintech_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Flask API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fintech_backend
+    restart: always
+    environment:
+      FLASK_APP: run.py
+      FLASK_ENV: ${FLASK_ENV:-production}
+      MONGO_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-admin123}@mongodb:27017/fintech_forecasting?authSource=admin
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      MODEL_PATH: /app/trained_models
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+      - model_storage:/app/trained_models
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - fintech_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend React Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:5000/api}
+    container_name: fintech_frontend
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - fintech_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Data Collector Service (runs periodically)
+  data-collector:
+    build:
+      context: ./data-collector
+      dockerfile: Dockerfile
+    container_name: fintech_collector
+    restart: always
+    environment:
+      MONGO_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-admin123}@mongodb:27017/fintech_forecasting?authSource=admin
+      COLLECTION_INTERVAL: ${COLLECTION_INTERVAL:-3600}  # seconds
+      INSTRUMENTS: ${INSTRUMENTS:-BTC-USD,ETH-USD,AAPL,GOOGL}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - fintech_network
+    volumes:
+      - ./data-collector:/app
+
+networks:
+  fintech_network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  model_storage:
+    driver: local
