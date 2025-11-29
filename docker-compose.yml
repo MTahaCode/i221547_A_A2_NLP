@@ -60,13 +60,20 @@ services:
     container_name: fintech_frontend
     restart: always
     ports:
-      - "3000:80"
+      - "3000:5173"
+    volumes:
+      - ./frontend:/app             # Mount your local frontend code
+      - /app/node_modules           # Prevent overwriting node_modules inside container
+    working_dir: /app
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]      # Run dev server instead of nginx
     depends_on:
       - backend
     networks:
       - fintech_network
+    environment:
+      - CHOKIDAR_USEPOLLING=true    # Ensures live reload works in Docker
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3

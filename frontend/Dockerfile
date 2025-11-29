@@ -1,32 +1,17 @@
-# Build stage
-FROM node:20-alpine as build
+# Development Dockerfile for React
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files
+# Copy package.json and install dependencies
 COPY package*.json ./
-
-# Install ALL deps (including devDeps, needed for vite build)
 RUN npm install
 
-# Copy source code
+# Copy the rest of the frontend code
 COPY . .
 
-# Build the app
-ARG VITE_API_URL
-ENV VITE_API_URL=$VITE_API_URL
-RUN npm run build
+# Expose the React dev server port
+EXPOSE 3000
 
-# Production stage
-FROM nginx:alpine
-
-# Copy custom nginx config (optional)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copy built app (Vite outputs to /dist)
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# Expose port
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+# Start the React development server
+CMD ["npm", "run", "dev"]
